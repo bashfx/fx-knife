@@ -1,0 +1,70 @@
+#!/bin/bash
+# renumber-children - Heal the withered H2 children with proper parent numbering
+# Usage: ./renumber-children BASHFX-v3.md
+
+file="$1"
+[[ -z "$file" ]] && { echo "Usage: $0 <markdown-file>"; exit 1; }
+
+temp_file=$(mktemp)
+current_part_num=""
+h2_counter=0
+h3_counter=0
+
+echo "🔄 === The Great Renumbering: Healing Withered Children === 🔄"
+
+while IFS= read -r line; do
+    case "$line" in
+        "# Part "*)
+            # Extract Roman numeral and convert to Arabic
+            roman=$(echo "$line" | sed 's/# Part \([IVXLCDM]*\).*/\1/')
+            case "$roman" in
+                "I") current_part_num="1" ;;
+                "II") current_part_num="2" ;;
+                "III") current_part_num="3" ;;
+                "IV") current_part_num="4" ;;
+                "V") current_part_num="5" ;;
+                "VI") current_part_num="6" ;;
+                "VII") current_part_num="7" ;;
+                *) current_part_num="" ;;
+            esac
+            h2_counter=0
+            h3_counter=0
+            echo "$line"
+            ;;
+        "## "*)
+            if [[ -n "$current_part_num" ]]; then
+                ((h2_counter++))
+                h3_counter=0
+                # Remove existing numbering and add proper parent-child numbering
+                clean_heading=$(echo "$line" | sed 's/^## *[0-9]*\.[0-9]* */## /')
+                new_heading=$(echo "$clean_heading" | sed "s/^## /## ${current_part_num}.${h2_counter} /")
+                echo "$new_heading"
+                echo "   ✨ Healed: $line → $new_heading" >&2
+            else
+                echo "$line"
+            fi
+            ;;
+        "### "*)
+            if [[ -n "$current_part_num" && $h2_counter -gt 0 ]]; then
+                ((h3_counter++))
+                # Remove existing numbering and add proper parent-child-grandchild numbering
+                clean_heading=$(echo "$line" | sed 's/^### *[0-9]*\.[0-9]*\.*[0-9]* */### /')
+                new_heading=$(echo "$clean_heading" | sed "s/^### /### ${current_part_num}.${h2_counter}.${h3_counter} /")
+                echo "$new_heading"
+                echo "      ✨ Healed: $line → $new_heading" >&2
+            else
+                echo "$line"
+            fi
+            ;;
+        *)
+            echo "$line"
+            ;;
+    esac
+done < "$file" > "$temp_file"
+
+echo
+echo "💾 Renumbered content saved to: ${file}.renumbered"
+cp "$temp_file" "${file}.renumbered"
+rm "$temp_file"
+
+echo "🎉 The Great Renumbering is complete! All children now know their proper parents!"

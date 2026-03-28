@@ -1,0 +1,39 @@
+#!/bin/bash
+# kb-section - Mystical section extraction from divided beasts
+# Usage: kb-section bashfx@3.0#4  or  kb-section bashfx#dispatcher
+
+doc="$1"
+[[ -z "$doc" ]] && { echo "Usage: kb-section doc@version#section"; exit 1; }
+
+# Parse the mystical address
+if [[ "$doc" =~ ^([^@]+)@([^#]+)#(.+)$ ]]; then
+    docname="${BASH_REMATCH[1]}"
+    version="${BASH_REMATCH[2]}"
+    section="${BASH_REMATCH[3]}"
+elif [[ "$doc" =~ ^([^#]+)#(.+)$ ]]; then
+    docname="${BASH_REMATCH[1]}"
+    version="$(jq -r '.current' "${docname}/.ix-meta.json" 2>/dev/null || echo "v3.0")"
+    section="${BASH_REMATCH[2]}"
+else
+    echo "❌ Invalid format. Use: doc@version#section or doc#section"
+    exit 1
+fi
+
+echo "⚡ Summoning section '$section' from $docname $version"
+
+# Find the pup by number or name
+if [[ "$section" =~ ^[0-9]+$ ]]; then
+    # Numeric section
+    pup_dir=$(find "${docname}/${version}" -name "${section}-*" -type d 2>/dev/null | head -1)
+else
+    # Named section  
+    pup_dir=$(find "${docname}/${version}" -name "*-${section}" -type d 2>/dev/null | head -1)
+fi
+
+if [[ -z "$pup_dir" ]]; then
+    echo "❌ Section '$section' not found in $docname $version"
+    exit 1
+fi
+
+echo "🐕 Found pup: $pup_dir"
+cat "$pup_dir"/*.md

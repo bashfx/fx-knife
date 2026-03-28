@@ -1,0 +1,17 @@
+{
+  "document": "bashfx",
+  "current": "v3.0",
+  "versions": {
+    "v3.0": {
+      "sections": {
+        "1": {"name": "Philosophy", "range": "1.0-1.9", "description": "Guiding principles and naming ethos"},
+        "2": {"name": "Structure", "range": "2.0-2.9", "description": "System structure and XDG compliance"},
+        "3": {"name": "Interface", "range": "3.0-3.9", "description": "Standard interface and conventions"},
+        "4": {"name": "Dispatcher", "range": "4.0-4.9", "description": "CLI patterns and command routing"},
+        "5": {"name": "Patterns", "range": "5.0-5.9", "description": "Architectural patterns and call hierarchy"},
+        "6": {"name": "Style", "range": "6.0-6.9", "description": "Coding style and best practices"},
+        "7": {"name": "AI", "range": "7.0-7.9", "description": "AI-assisted development principles"}
+      }
+    }
+  }
+}

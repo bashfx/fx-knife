@@ -1,0 +1,48 @@
+#!/bin/bash
+# kb-assemble - Rewindability enchantment for document reconstruction
+# Usage: kb-assemble bashfx@3.0
+
+doc="$1"
+[[ -z "$doc" ]] && { echo "Usage: kb-assemble doc@version"; exit 1; }
+
+# Parse document and version
+if [[ "$doc" =~ ^([^@]+)@(.+)$ ]]; then
+    docname="${BASH_REMATCH[1]}"
+    version="${BASH_REMATCH[2]}"
+else
+    docname="$doc"  
+    version="$(jq -r '.current' "${docname}/.ix-meta.json" 2>/dev/null || echo "v3.0")"
+fi
+
+# Ensure version has v prefix
+[[ "$version" != v* ]] && version="v$version"
+
+echo "Reassembling $docname from version $version sections..."
+
+output_file="${docname}-${version}-reassembled.md"
+
+# Get ordered sections from metadata  
+echo "DEBUG: Using version: $version, docname: $docname"
+sections=$(jq -r '.versions."'$version'".sections | keys[]' "${docname}/.ix-meta.json" | sort -n)
+echo "DEBUG: Found sections: '$sections'"
+
+> "$output_file"  # Clear output file
+
+for section in $sections; do
+    section_dir=$(find "${docname}/${version}" -name "${section}-*" -type d | head -1)
+    
+    if [[ -n "$section_dir" ]]; then
+        echo "Adding section $section from $section_dir"
+        if ls "$section_dir"/*.md >/dev/null 2>&1; then
+            cat "$section_dir"/*.md >> "$output_file"
+            echo "" >> "$output_file"  # Add spacing between sections
+        else
+            echo "Warning: No .md files in $section_dir"
+        fi
+    else
+        echo "Warning: Section $section not found"
+    fi
+done
+
+echo "Reassembly complete: $output_file"
+echo "Lines: $(wc -l < "$output_file")"

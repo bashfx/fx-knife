@@ -1,0 +1,64 @@
+#!/bin/bash
+# divide-beast - Sacred Dance of Divides for F of X
+# Usage: ./divide-beast BASHFX-v3.md
+
+file="$1"
+[[ -z "$file" ]] && { echo "Usage: $0 <markdown-file>"; exit 1; }
+
+echo "⚡ === THE SACRED DANCE OF DIVIDES BEGINS === ⚡"
+echo
+
+# Create pup directories
+mkdir -p bashfx/v3.0/{1-philosophy,2-structure,3-interface,4-dispatcher,5-patterns,6-style,7-ai}
+
+current_part=""
+current_file=""
+
+while IFS= read -r line; do
+    case "$line" in
+        "# Part I:"*)
+            current_part="1-philosophy"
+            current_file="bashfx/v3.0/$current_part/part1.md"
+            echo "🐕 Creating Philosophy Pup: $current_file"
+            ;;
+        "# Part II:"*)
+            current_part="2-structure"
+            current_file="bashfx/v3.0/$current_part/part2.md"
+            echo "🐕 Creating Structure Pup: $current_file"
+            ;;
+        "# Part III:"*)
+            current_part="3-interface"
+            current_file="bashfx/v3.0/$current_part/part3.md"
+            echo "🐕 Creating Interface Pup: $current_file"
+            ;;
+        "# Part IV:"*)
+            current_part="4-dispatcher"
+            current_file="bashfx/v3.0/$current_part/part4.md"
+            echo "🐕 Creating Dispatcher Pup: $current_file"
+            ;;
+        "# Part V:"*)
+            current_part="5-patterns"
+            current_file="bashfx/v3.0/$current_part/part5.md"
+            echo "🐕 Creating Patterns Pup: $current_file"
+            ;;
+        "# Part VI:"*)
+            current_part="6-style"
+            current_file="bashfx/v3.0/$current_part/part6.md"
+            echo "🐕 Creating Style Pup: $current_file"
+            ;;
+        "# Part VII:"*)
+            current_part="7-ai"
+            current_file="bashfx/v3.0/$current_part/part7.md"
+            echo "🐕 Creating AI Assistant Pup: $current_file"
+            ;;
+    esac
+    
+    # Write line to current pup file
+    if [[ -n "$current_file" ]]; then
+        echo "$line" >> "$current_file"
+    fi
+done < "$file"
+
+echo
+echo "🎉 THE DANCE OF DIVIDES IS COMPLETE!"
+echo "🐕 Seven adorable pups created from the mighty beast!"

@@ -1,0 +1,414 @@
+#!/bin/bash
+# lore - Biblical lore management with hierarchical verse structure
+# Usage: lore write bible genesis.1.3 "verse text"
+#        lore read bible genesis.1.3
+#        lore read bible@1.0#genesis
+
+# Ensure countx is available
+ensure_countx() {
+    local countx_path
+    
+    # Check if countx exists in local bin first
+    if [[ -x "../../bin/countx" ]]; then
+        countx_path="../../bin/countx"
+    elif command -v countx >/dev/null 2>&1; then
+        countx_path="countx"
+    else
+        echo "countx not found. Installing local copy..."
+        
+        # Try to find and copy countx from system
+        local system_countx
+        if system_countx=$(command -v countx 2>/dev/null); then
+            mkdir -p ../../bin
+            cp "$system_countx" ../../bin/countx
+            chmod +x ../../bin/countx
+            countx_path="../../bin/countx"
+            echo "countx installed to knowledge/bin/"
+        else
+            echo "ERROR: countx not available and cannot be installed automatically"
+            echo "Please install countx or copy it to knowledge/bin/"
+            return 1
+        fi
+    fi
+    
+    # Set global countx command
+    COUNTX_CMD="$countx_path"
+    return 0
+}
+
+# Counter management function
+manage_counter() {
+    local counter_type="$1"  # chapter, stanza, verse
+    local book="$2"
+    local section="$3" 
+    local chapter="$4"
+    local stanza="$5"
+    
+    # Ensure countx is available
+    if ! ensure_countx; then
+        echo "1"  # Fallback to manual numbering
+        return 1
+    fi
+    
+    local counter_dir=".agent/lore/library/$book"
+    mkdir -p "$counter_dir"
+    cd "$counter_dir"
+    
+    local counter_name
+    case "$counter_type" in
+        chapter)
+            counter_name=".${section}_chapter"
+            ;;
+        stanza)
+            counter_name=".${section}_${chapter}_stanza"
+            ;;
+        verse)
+            counter_name=".${section}_${chapter}_${stanza}_verse"
+            ;;
+    esac
+    
+    # Set format based on counter type
+    local format_flag=""
+    case "$counter_type" in
+        chapter)
+            format_flag="--fmt 0"      # Single digit: 1, 2, 3
+            ;;
+        stanza)
+            format_flag="--fmt 0"      # Single digit: 1, 2, 3
+            ;;
+        verse)
+            format_flag="--fmt 000"    # Three digits: 001, 002, 003
+            ;;
+    esac
+    
+    # Initialize or increment counter using ensured countx
+    if [[ ! -f "$counter_name" ]]; then
+        $COUNTX_CMD init 1 $format_flag --name "$counter_name" >/dev/null
+        # Get initial value after initialization
+        $COUNTX_CMD --name "$counter_name"
+    else
+        # Increment then get value
+        $COUNTX_CMD 1 --name "$counter_name" >/dev/null
+        $COUNTX_CMD --name "$counter_name"
+    fi
+    cd - >/dev/null
+}
+
+cmd="$1"
+shift
+
+case "$cmd" in
+    new)
+        context_type="$1"
+        context_value="$2"
+        
+        # Load current context from book-specific rc file
+        current_book="${current_book:-bible}"
+        rc_file=".${current_book}rc"
+        if [[ -f "$rc_file" ]]; then
+            source "$rc_file"
+        fi
+        
+        case "$context_type" in
+            chapter)
+                # Parse section.chapter or auto-increment
+                if [[ "$context_value" =~ ^([^.]+)\.([^.]+)$ ]]; then
+                    current_book="${current_book:-bible}"
+                    current_section="${BASH_REMATCH[1]}"
+                    current_chapter="${BASH_REMATCH[2]}"
+                elif [[ "$context_value" =~ ^([^.]+)\.next$ ]]; then
+                    # Auto-increment chapter using countx
+                    current_book="${current_book:-bible}"
+                    current_section="${BASH_REMATCH[1]}"
+                    
+                    # Initialize or increment chapter counter
+                    counter_dir=".agent/lore/library/$current_book"
+                    mkdir -p "$counter_dir"
+                    cd "$counter_dir"
+                    
+                    chapter_counter="${current_section}_chapter"
+                    if [[ ! -f ".$chapter_counter" ]]; then
+                        countx init 1 --name ".$chapter_counter"
+                    else
+                        countx 1 --name ".$chapter_counter"
+                    fi
+                    current_chapter=$(countx --name ".$chapter_counter")
+                    cd - >/dev/null
+                fi
+                
+                current_stanza=1
+                current_verse=1
+                echo "New chapter: $current_section $current_chapter"
+                ;;
+            stanza)
+                # Auto-increment or explicit stanza
+                if [[ "$context_value" == "next" ]]; then
+                    counter_dir=".agent/lore/library/$current_book"
+                    cd "$counter_dir"
+                    stanza_counter="${current_section}_${current_chapter}_stanza"
+                    if [[ ! -f ".$stanza_counter" ]]; then
+                        countx init 1 --name ".$stanza_counter"
+                    else
+                        countx 1 --name ".$stanza_counter"
+                    fi
+                    current_stanza=$(countx --name ".$stanza_counter")
+                    cd - >/dev/null
+                else
+                    current_stanza="$context_value"
+                fi
+                current_verse=1
+                echo "New stanza: $current_stanza (scene/mighty quote context)"
+                ;;
+            verse)
+                # Auto-increment verse using counter manager
+                current_verse=$(manage_counter "verse" "$current_book" "$current_section" "$current_chapter" "$current_stanza")
+                echo "New verse: $current_verse"
+                ;;
+        esac
+        
+        # Save context to book-specific rc file
+        rc_file=".${current_book}rc"
+        cat > "$rc_file" << EOF
+current_book=${current_book:-bible}
+current_section=${current_section:-genesis}
+current_chapter=${current_chapter:-1}
+current_stanza=${current_stanza:-1}  
+current_verse=${current_verse:-1}
+EOF
+        echo "Context saved to $rc_file"
+        ;;
+    
+    write)
+        # Check if using context (single argument) or full address
+        if [[ $# -eq 1 ]]; then
+            # Context-based writing
+            verse_text="$1"
+            
+            # Load context from bible rc (default book)
+            rc_file=".biblerc"
+            if [[ -f "$rc_file" ]]; then
+                source "$rc_file"
+            else
+                echo "No context found. Use 'lore new chapter section.chapter' first"
+                exit 1
+            fi
+            
+            book="$current_book"
+            section="$current_section"
+            chapter="$current_chapter"
+            stanza="$current_stanza" 
+            verse="$current_verse"
+            
+            echo "Writing $section $chapter.$stanza.$verse"
+        else
+            # Traditional addressing
+            book="$1"
+            address="$2"  
+            verse_text="$3"
+            
+            # Parse section.chapter.stanza.verse or section.chapter.verse
+            if [[ "$address" =~ ^([^.]+)\.([^.]+)\.([^.]+)\.([^.]+)$ ]]; then
+                section="${BASH_REMATCH[1]}"
+                chapter="${BASH_REMATCH[2]}"
+                stanza="${BASH_REMATCH[3]}"
+                verse="${BASH_REMATCH[4]}"
+            elif [[ "$address" =~ ^([^.]+)\.([^.]+)\.([^.]+)$ ]]; then
+                section="${BASH_REMATCH[1]}"
+                chapter="${BASH_REMATCH[2]}"  
+                verse="${BASH_REMATCH[3]}"
+                stanza=1  # Default stanza
+            else
+                echo "Usage: lore write book section.chapter.stanza.verse 'text' or lore write 'text' (with context)"
+                exit 1
+            fi
+        fi
+        
+        # Parse book@version#section.chapter.verse or book section.chapter.verse
+        if [[ "$book" =~ ^([^@]+)@([^#]+)$ ]]; then
+            bookname="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+        else
+            bookname="$book"
+            version="v1.0"  # Default version
+        fi
+        
+        # Parse section.chapter.verse
+        if [[ "$address" =~ ^([^.]+)\.([^.]+)\.([^.]+)$ ]]; then
+            section="${BASH_REMATCH[1]}"
+            chapter="${BASH_REMATCH[2]}"  
+            verse="${BASH_REMATCH[3]}"
+        else
+            echo "Usage: lore write book section.chapter.verse 'text'"
+            exit 1
+        fi
+        
+        # Find section directory
+        lore_path=".agent/lore/library/$bookname/$version"
+        section_dir=$(find "$lore_path" -name "*-$section" -type d | head -1)
+        
+        if [[ -z "$section_dir" ]]; then
+            echo "Section '$section' not found in $bookname $version"
+            exit 1
+        fi
+        
+        # Create chapter file if needed
+        chapter_file="$section_dir/$chapter.md"
+        if [[ ! -f "$chapter_file" ]]; then
+            echo "# $section Chapter $chapter" > "$chapter_file"
+            echo "" >> "$chapter_file"
+        fi
+        
+        # Check if stanza section exists, create if needed
+        if ! grep -q "^## Stanza $stanza" "$chapter_file"; then
+            echo "" >> "$chapter_file"
+            echo "## Stanza $stanza" >> "$chapter_file"
+            echo "" >> "$chapter_file"
+        fi
+        
+        # Add verse in proper biblical format
+        echo "**$chapter:$stanza:$verse** - $verse_text" >> "$chapter_file"
+        echo "">> "$chapter_file"
+        
+        # Update context for next verse  
+        rc_file=".${book}rc"
+        if [[ -f "$rc_file" ]]; then
+            source "$rc_file"
+            ((current_verse++))
+            cat > "$rc_file" << EOF
+current_book=$current_book
+current_section=$current_section
+current_chapter=$current_chapter
+current_stanza=$current_stanza
+current_verse=$current_verse
+EOF
+        fi
+        
+        echo "Added verse $section $chapter:$stanza:$verse to $bookname"
+        ;;
+        
+    read)
+        book="$1" 
+        address="$2"
+        
+        # Parse book@version#section or book section.chapter.verse
+        if [[ "$book" =~ ^([^@]+)@([^#]+)#(.+)$ ]]; then
+            bookname="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+            section="${BASH_REMATCH[3]}"
+            # Read full section
+            lore_path=".agent/lore/library/$bookname/$version"
+            section_dir=$(find "$lore_path" -name "*-$section" -type d | head -1)
+            if [[ -n "$section_dir" ]]; then
+                cat "$section_dir"/*.md 2>/dev/null
+            fi
+        elif [[ "$address" =~ ^([^.]+)\.([^.]+)\.([^.]+)$ ]]; then
+            # Specific verse
+            section="${BASH_REMATCH[1]}"
+            chapter="${BASH_REMATCH[2]}"
+            verse="${BASH_REMATCH[3]}"
+            
+            lore_path=".agent/lore/library/$book/v1.0"
+            section_dir=$(find "$lore_path" -name "*-$section" -type d | head -1)
+            chapter_file="$section_dir/$chapter.md"
+            
+            if [[ -f "$chapter_file" ]]; then
+                grep "^$chapter:$verse -" "$chapter_file"
+            fi
+        elif [[ "$address" =~ ^([^.]+)\.([^.]+)$ ]]; then
+            # Full chapter
+            section="${BASH_REMATCH[1]}"
+            chapter="${BASH_REMATCH[2]}"
+            
+            lore_path=".agent/lore/library/$book/v1.0"
+            section_dir=$(find "$lore_path" -name "*-$section" -type d | head -1)
+            chapter_file="$section_dir/$chapter.md"
+            
+            if [[ -f "$chapter_file" ]]; then
+                cat "$chapter_file"
+            fi
+        fi
+        ;;
+        
+    define)
+        term="$1"
+        shift
+        definition="$*"
+        
+        if [[ -z "$term" || -z "$definition" ]]; then
+            echo "Usage: lore define word 'definition phrase bla blabla'"
+            exit 1
+        fi
+        
+        # Create glossary file if needed
+        glossary_file=".agent/lore/GLOSSARY.md"
+        if [[ ! -f "$glossary_file" ]]; then
+            echo "# IX Realm Glossary" > "$glossary_file"
+            echo "*Definitions of mythic terminology and sacred concepts*" >> "$glossary_file"
+            echo "" >> "$glossary_file"
+        fi
+        
+        # Add/update definition (sorted alphabetically)
+        temp_file=$(mktemp)
+        
+        # Remove existing definition if present
+        grep -v "^**$term**:" "$glossary_file" > "$temp_file" || cp "$glossary_file" "$temp_file"
+        
+        # Add new definition
+        echo "**$term**: $definition" >> "$temp_file"
+        
+        # Sort definitions (skip header lines)
+        head -3 "$temp_file" > "$glossary_file"
+        tail -n +4 "$temp_file" | sort >> "$glossary_file"
+        
+        rm "$temp_file"
+        echo "Defined: $term"
+        ;;
+        
+    lookup)
+        term="$1"
+        limit="$2"
+        glossary_file=".agent/lore/GLOSSARY.md"
+        
+        if [[ ! -f "$glossary_file" ]]; then
+            echo "No glossary found"
+            exit 1
+        fi
+        
+        if [[ -z "$term" ]]; then
+            # Show all definitions
+            cat "$glossary_file"
+        elif [[ "$term" =~ ^[A-Za-z]$ ]]; then
+            # Show definitions starting with specific letter
+            echo "# Terms starting with '$term'"
+            echo ""
+            
+            # Get definitions starting with the letter
+            definitions=$(grep "^**$term" "$glossary_file" -i)
+            
+            if [[ -n "$limit" && "$limit" != "all" ]]; then
+                # Limit number of results
+                echo "$definitions" | head -n "$limit"
+            else
+                echo "$definitions"
+            fi
+        else
+            # Show specific definition
+            grep "^**$term**:" "$glossary_file" || echo "Term '$term' not found"
+        fi
+        ;;
+        
+    list)
+        book="${1:-bible}"
+        version="${2:-v1.0}"
+        echo "Books available in $book $version:"
+        find ".agent/lore/library/$book/$version" -name "*.md" | sort
+        ;;
+        
+    *)
+        echo "Usage: lore {write|read|list|define|lookup}"
+        echo "  write book section.chapter.verse 'text'"
+        echo "  read book@version#section" 
+        echo "  read book section.chapter.verse"
+        echo "  list [book] [version]"
+        ;;
+esac

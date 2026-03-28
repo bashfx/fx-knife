@@ -1,0 +1,50 @@
+#!/bin/bash
+# validate-children - Find H1s and validate their H2 children's positions
+# Usage: ./validate-children BASHFX-v3.md
+
+file="$1"
+[[ -z "$file" ]] && { echo "Usage: $0 <markdown-file>"; exit 1; }
+
+echo "👑 === The Great Renumbering: H1 Parents & Their Children === 👑"
+echo
+
+current_part=""
+part_number=""
+
+# Process each line, tracking H1 parents and their H2/H3 children
+while IFS= read -r line; do
+    case "$line" in
+        "# Part "*)
+            current_part="$line"
+            # Extract part number (Roman numeral)
+            part_number=$(echo "$line" | sed 's/# Part \([IVXLCDM]*\).*/\1/')
+            echo "👑 PARENT: $line"
+            echo "   Expected children should start with: $(echo "$part_number" | sed 's/I/1/;s/II/2/;s/III/3/;s/IV/4/;s/V/5/;s/VI/6/;s/VII/7/')"
+            ;;
+        "## "*|"### "*)
+            if [[ -n "$current_part" ]]; then
+                # Extract any numbering from the heading
+                heading_num=$(echo "$line" | grep -o '^##* [0-9]*\.[0-9]*' | grep -o '[0-9]*\.[0-9]*')
+                indent="   "
+                [[ "$line" =~ ^### ]] && indent="      "
+                
+                if [[ -n "$heading_num" ]]; then
+                    expected_prefix=$(echo "$part_number" | sed 's/I/1/;s/II/2/;s/III/3/;s/IV/4/;s/V/5/;s/VI/6/;s/VII/7/')
+                    if [[ "$heading_num" =~ ^${expected_prefix}\. ]]; then
+                        echo "${indent}✅ $line"
+                    else
+                        echo "${indent}❌ $line (expected ${expected_prefix}.x)"
+                    fi
+                else
+                    echo "${indent}🤔 $line (no numbering)"
+                fi
+            fi
+            ;;
+    esac
+done < "$file"
+
+echo
+echo "🔍 === Numbering Analysis ==="
+echo "✅ = Correct numbering for parent part"
+echo "❌ = Incorrect numbering for parent part"  
+echo "🤔 = No numbering detected"

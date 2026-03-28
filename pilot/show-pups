@@ -1,0 +1,39 @@
+#!/bin/bash
+# show-pups - Display F of X beast's natural pup divisions
+# Usage: ./show-pups BASHFX-v3.md
+
+file="$1"
+[[ -z "$file" ]] && { echo "Usage: $0 <markdown-file>"; exit 1; }
+
+echo "🐕 === F of X Beast's Adorable Pups === 🐕"
+echo
+
+# Extract each Part with its size and character
+awk '/^# Part/ {
+    if (current_part) {
+        lines = NR - start_line
+        printf "🐕 %-40s | %4d lines | %s\n", current_part, lines, description
+    }
+    start_line = NR
+    current_part = substr($0, 3)  # Remove "# "
+    # Get next few lines to find description
+    getline; description = $0
+    while (getline && /^$/) continue  # Skip empty lines
+    if (/^##/) description = substr($0, 4)
+}
+END {
+    if (current_part) {
+        lines = NR - start_line + 1
+        printf "🐕 %-40s | %4d lines | %s\n", current_part, lines, description
+    }
+}' "$file"
+
+echo
+echo "🎾 === Pup Personalities ===  🎾"
+echo "Philosophy Pup    - Wise and principled, teaches the way"
+echo "Structure Pup     - Organized and systematic, builds foundations" 
+echo "Interface Pup     - Friendly and accessible, greets everyone"
+echo "Dispatcher Pup    - Smart coordinator, routes everything properly"
+echo "Patterns Pup      - Creative architect, designs elegant solutions"
+echo "Style Pup         - Meticulous groomer, keeps everything beautiful"
+echo "AI Assistant Pup  - Modern helper, bridges old and new wisdom"

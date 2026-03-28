@@ -1,0 +1,23 @@
+#!/bin/bash
+# extract-sections - Tiny driver to identify F of X sections
+# Usage: ./extract-sections BASHFX-v3.md
+
+file="$1"
+[[ -z "$file" ]] && { echo "Usage: $0 <markdown-file>"; exit 1; }
+
+echo "=== F of X Beast Anatomy ==="
+echo
+
+# Extract major parts with line numbers
+grep -n "^# Part" "$file"
+
+echo
+echo "=== Section Details ==="
+
+# Extract all heading structure 
+awk '/^#/ { 
+    level = length($1)
+    line = NR
+    heading = substr($0, level+2)
+    printf "%4d | %s%s\n", line, sprintf("%*s", (level-1)*2, ""), heading
+}' "$file"
